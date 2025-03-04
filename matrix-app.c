@@ -19,13 +19,14 @@ typedef struct {
     unsigned rows;
     unsigned cols;
     GtkWidget **entries;
-    GtkWidget *result_label;  // Store the result label as a widget pointer
+    GtkWidget *result_label;
     GtkWindow *input_window;
     Matrix *matrix;
     GtkWidget *rows_entry;
     GtkWidget *cols_entry;
     GtkWidget *display_btn;
-    GtkWidget *matrix_container; // Container for matrix grid and display button
+    GtkWidget *determinant_btn;
+    GtkWidget *matrix_container;
 } MatrixInputData;
 
 Matrix *create_matrix(unsigned M, unsigned N) {
@@ -92,6 +93,36 @@ double determinant(Matrix *matrix) {
 
     free(data);
     return det;
+}
+
+static void on_determinant_clicked(GtkWidget *widget, gpointer data) {
+    MatrixInputData *input_data = data;
+    
+    if (!input_data || !input_data->matrix || !GTK_IS_LABEL(input_data->result_label)) {
+        g_print("Error: Invalid matrix or result label\n");
+        return;
+    }
+
+    // Recalculate matrix values from current entries to ensure it's up to date
+    for (unsigned i = 0; i < input_data->rows; i++) {
+        for (unsigned j = 0; j < input_data->cols; j++) {
+            GtkEntry *entry = GTK_ENTRY(input_data->entries[i * input_data->cols + j]);
+            const char *text = gtk_editable_get_text(GTK_EDITABLE(entry));
+            int value = atoi(text);
+            set_element(input_data->matrix, i, j, value);
+        }
+    }
+
+    // Check if matrix is square for determinant calculation
+    if (input_data->matrix->M != input_data->matrix->N) {
+        gtk_label_set_text(GTK_LABEL(input_data->result_label), "Determinant requires a square matrix");
+        return;
+    }
+
+    double det = determinant(input_data->matrix);
+    char message[100];
+    snprintf(message, sizeof(message), "Determinant: %.2f", det);
+    gtk_label_set_text(GTK_LABEL(input_data->result_label), message);
 }
 
 static void on_display_matrix_clicked(GtkWidget *widget, gpointer data) {
@@ -198,14 +229,27 @@ static void on_calculate_clicked(GtkWidget *widget, gpointer data) {
     snprintf(message, 50, "Determinant: %.2f", det);
     gtk_label_set_text(GTK_LABEL(input_data->result_label), message);
 
+    // Remove previous buttons if they exist
     if (input_data->display_btn) {
         gtk_grid_remove(GTK_GRID(grid), input_data->display_btn);
     }
+    if (input_data->determinant_btn) {
+        gtk_grid_remove(GTK_GRID(grid), input_data->determinant_btn);
+    }
 
+    // Create Display Matrix button
     input_data->display_btn = gtk_button_new_with_label("Display Matrix");
-    gtk_grid_attach(GTK_GRID(grid), input_data->display_btn, 0, rows, cols, 1);
+    gtk_grid_attach(GTK_GRID(grid), input_data->display_btn, 0, rows, cols/2, 1);
     g_signal_connect(input_data->display_btn, "clicked", G_CALLBACK(on_display_matrix_clicked), input_data);
     gtk_widget_set_visible(input_data->display_btn, TRUE);
+
+    // Create Determinant button only for square matrices
+    if (rows == cols) {
+        input_data->determinant_btn = gtk_button_new_with_label("Calculate Determinant");
+        gtk_grid_attach(GTK_GRID(grid), input_data->determinant_btn, cols/2, rows, cols/2, 1);
+        g_signal_connect(input_data->determinant_btn, "clicked", G_CALLBACK(on_determinant_clicked), input_data);
+        gtk_widget_set_visible(input_data->determinant_btn, TRUE);
+    }
 }
 
 static void activate(GtkApplication *app, gpointer user_data) {
