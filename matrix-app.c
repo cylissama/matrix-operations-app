@@ -10,13 +10,22 @@ typedef struct Matrix {
     int *data;
 } Matrix;
 
+// Function prototypes
+Matrix *create_matrix(unsigned M, unsigned N);
+void set_element(Matrix *matrix, unsigned i, unsigned j, int value);
+double determinant(Matrix *matrix);
+
 typedef struct {
     unsigned rows;
     unsigned cols;
     GtkWidget **entries;
-    GtkWidget *result_label;
+    GtkWidget *result_label;  // Store the result label as a widget pointer
     GtkWindow *input_window;
-    Matrix *matrix;  // Store the matrix for later display
+    Matrix *matrix;
+    GtkWidget *rows_entry;
+    GtkWidget *cols_entry;
+    GtkWidget *display_btn;
+    GtkWidget *matrix_container; // Container for matrix grid and display button
 } MatrixInputData;
 
 Matrix *create_matrix(unsigned M, unsigned N) {
@@ -87,84 +96,75 @@ double determinant(Matrix *matrix) {
 
 static void on_display_matrix_clicked(GtkWidget *widget, gpointer data) {
     MatrixInputData *input_data = data;
-    Matrix *matrix = input_data->matrix;
     
-    if (!matrix) {
+    if (!input_data || !input_data->result_label || !GTK_IS_LABEL(input_data->result_label)) {
+        g_print("Error: Invalid result label or input data\n");
+        return;
+    }
+    
+    if (!input_data->matrix) {
         gtk_label_set_text(GTK_LABEL(input_data->result_label), "No matrix to display");
         return;
     }
 
-    // Create a string to hold the matrix representation
-    GString *matrix_str = g_string_new("Matrix:\n");
-    
-    for (unsigned i = 0; i < matrix->M; i++) {
-        for (unsigned j = 0; j < matrix->N; j++) {
-            g_string_append_printf(matrix_str, "%d ", matrix->data[i * matrix->N + j]);
-        }
-        g_string_append(matrix_str, "\n");
-    }
-
-    // Display the matrix in the label
-    gtk_label_set_text(GTK_LABEL(input_data->result_label), matrix_str->str);
-    
-    // Free the string
-    g_string_free(matrix_str, TRUE);
-}
-
-static void on_calculate_clicked(GtkWidget *widget, gpointer data) {
-    MatrixInputData *input_data = data;
-    Matrix *matrix = create_matrix(input_data->rows, input_data->cols);
-    
-    if (!matrix) {
-        gtk_label_set_text(GTK_LABEL(input_data->result_label), "Failed to create matrix");
-        return;
-    }
-
+    // UPDATE MATRIX VALUES FROM CURRENT ENTRIES
     for (unsigned i = 0; i < input_data->rows; i++) {
         for (unsigned j = 0; j < input_data->cols; j++) {
             GtkEntry *entry = GTK_ENTRY(input_data->entries[i * input_data->cols + j]);
             const char *text = gtk_editable_get_text(GTK_EDITABLE(entry));
             int value = atoi(text);
-            set_element(matrix, i, j, value);
+            set_element(input_data->matrix, i, j, value);
         }
     }
 
-    // Store the matrix for later display
-    input_data->matrix = matrix;
-
-    double det = determinant(matrix);
-    char message[50];
-    snprintf(message, 50, "Determinant: %.2f", det);
-    gtk_label_set_text(GTK_LABEL(input_data->result_label), message);
-
-    // Show the display matrix button
-    GtkWidget *display_btn = gtk_button_new_with_label("Display Matrix");
-    gtk_grid_attach(GTK_GRID(gtk_window_get_child(input_data->input_window)), 
-                    display_btn, 0, input_data->rows + 1, input_data->cols, 1);
-    g_signal_connect(display_btn, "clicked", G_CALLBACK(on_display_matrix_clicked), input_data);
-    gtk_widget_set_visible(display_btn, TRUE);
-}
-
-static void create_input_dialog(int rows, int cols, GtkWindow *parent, GtkWidget *result_label) {
-    GtkWidget *input_window = gtk_window_new();
-    gtk_window_set_title(GTK_WINDOW(input_window), "Matrix Input");
-    gtk_window_set_default_size(GTK_WINDOW(input_window), 400, 300);
-    
-    // Set the transient parent
-    if (parent) {
-        gtk_window_set_transient_for(GTK_WINDOW(input_window), parent);
+    GString *matrix_str = g_string_new("Matrix:\n");
+    for (unsigned i = 0; i < input_data->matrix->M; i++) {
+        for (unsigned j = 0; j < input_data->matrix->N; j++) {
+            g_string_append_printf(matrix_str, "%d ", input_data->matrix->data[i * input_data->matrix->N + j]);
+        }
+        g_string_append(matrix_str, "\n");
     }
 
-    MatrixInputData *input_data = malloc(sizeof(MatrixInputData));
-    input_data->rows = rows;
-    input_data->cols = cols;
-    input_data->entries = malloc(rows * cols * sizeof(GtkWidget*));
-    input_data->input_window = GTK_WINDOW(input_window);
-    input_data->matrix = NULL;  // Initialize matrix pointer to NULL
-    input_data->result_label = result_label;
+    gtk_label_set_text(GTK_LABEL(input_data->result_label), matrix_str->str);
+    g_string_free(matrix_str, TRUE);
+}
+
+static void on_calculate_clicked(GtkWidget *widget, gpointer data) {
+    MatrixInputData *input_data = data;
+    
+    if (!GTK_IS_LABEL(input_data->result_label)) {
+        g_print("Error: Result label is invalid\n");
+        return;
+    }
+    
+    const char *rows_text = gtk_editable_get_text(GTK_EDITABLE(input_data->rows_entry));
+    const char *cols_text = gtk_editable_get_text(GTK_EDITABLE(input_data->cols_entry));
+    
+    int rows = atoi(rows_text);
+    int cols = atoi(cols_text);
+    
+    if (rows <= 0 || cols <= 0) {
+        gtk_label_set_text(GTK_LABEL(input_data->result_label), "Invalid matrix dimensions");
+        return;
+    }
+
+    if (input_data->entries) {
+        free(input_data->entries);
+        input_data->entries = NULL;
+    }
+
+    // Clear previous matrix container content
+    GtkWidget *child;
+    while ((child = gtk_widget_get_first_child(input_data->matrix_container))) {
+        gtk_box_remove(GTK_BOX(input_data->matrix_container), child);
+    }
 
     GtkWidget *grid = gtk_grid_new();
-    gtk_window_set_child(GTK_WINDOW(input_window), grid);
+    gtk_box_append(GTK_BOX(input_data->matrix_container), grid);
+
+    input_data->entries = malloc(rows * cols * sizeof(GtkWidget*));
+    input_data->rows = rows;
+    input_data->cols = cols;
 
     for (unsigned i = 0; i < rows; i++) {
         for (unsigned j = 0; j < cols; j++) {
@@ -175,92 +175,79 @@ static void create_input_dialog(int rows, int cols, GtkWindow *parent, GtkWidget
         }
     }
 
-    GtkWidget *calc_btn = gtk_button_new_with_label("Calculate");
-    gtk_grid_attach(GTK_GRID(grid), calc_btn, 0, rows, cols, 1);
-    g_signal_connect(calc_btn, "clicked", G_CALLBACK(on_calculate_clicked), input_data);
-
-    gtk_window_present(GTK_WINDOW(input_window));
-}
-
-static void on_dimension_response(GtkWidget *dialog, int response, gpointer data) {
-    GtkWindow *parent = gtk_window_get_transient_for(GTK_WINDOW(dialog));
-    GtkWidget *result_label = GTK_WIDGET(g_object_get_data(G_OBJECT(parent), "result_label"));
+    Matrix *matrix = create_matrix(rows, cols);
     
-    if (response == GTK_RESPONSE_OK) {
-        GtkEntry *entry = GTK_ENTRY(gtk_widget_get_first_child(GTK_WIDGET(dialog)));
-        const char *text = gtk_editable_get_text(GTK_EDITABLE(entry));
-        int value = atoi(text);
-        
-        if (value <= 0) {
-            gtk_label_set_text(GTK_LABEL(result_label), "Invalid dimension value");
-            return;
-        }
-        
-        int *counter = (int *)data;
-        if (*counter == 0) {
-            int *rows = malloc(sizeof(int));
-            *rows = value;
-            GtkWidget *cols_dialog = gtk_dialog_new();
-            gtk_window_set_title(GTK_WINDOW(cols_dialog), "Enter Columns");
-            
-            // Set the transient parent
-            gtk_window_set_transient_for(GTK_WINDOW(cols_dialog), parent);
-            
-            GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(cols_dialog));
-            GtkWidget *entry = gtk_entry_new();
-            gtk_entry_set_placeholder_text(GTK_ENTRY(entry), "Columns");
-            gtk_box_append(GTK_BOX(content), entry);
-            gtk_window_present(GTK_WINDOW(cols_dialog));
-            g_signal_connect(cols_dialog, "response", G_CALLBACK(on_dimension_response), rows);
-        } else {
-            create_input_dialog(*counter, value, parent, result_label);
-            free(counter);
+    if (!matrix) {
+        gtk_label_set_text(GTK_LABEL(input_data->result_label), "Failed to create matrix");
+        return;
+    }
+
+    for (unsigned i = 0; i < rows; i++) {
+        for (unsigned j = 0; j < cols; j++) {
+            GtkEntry *entry = GTK_ENTRY(input_data->entries[i * cols + j]);
+            const char *text = gtk_editable_get_text(GTK_EDITABLE(entry));
+            int value = atoi(text);
+            set_element(matrix, i, j, value);
         }
     }
-    gtk_window_destroy(GTK_WINDOW(dialog));
-}
 
-static void on_button_clicked(GtkWidget *widget, gpointer data) {
-    GtkWindow *parent = GTK_WINDOW(gtk_widget_get_root(widget));
-    GtkWidget *result_label = GTK_WIDGET(g_object_get_data(G_OBJECT(parent), "result_label"));
-    
-    GtkWidget *dialog = gtk_dialog_new();
-    gtk_window_set_title(GTK_WINDOW(dialog), "Enter Rows");
-    
-    // Set the transient parent
-    gtk_window_set_transient_for(GTK_WINDOW(dialog), parent);
-    
-    GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-    GtkWidget *entry = gtk_entry_new();
-    gtk_entry_set_placeholder_text(GTK_ENTRY(entry), "Rows");
-    gtk_box_append(GTK_BOX(content), entry);
-    gtk_window_present(GTK_WINDOW(dialog));
-    
-    int *counter = malloc(sizeof(int));
-    *counter = 0;
-    g_signal_connect(dialog, "response", G_CALLBACK(on_dimension_response), counter);
+    input_data->matrix = matrix;
+
+    double det = determinant(matrix);
+    char message[50];
+    snprintf(message, 50, "Determinant: %.2f", det);
+    gtk_label_set_text(GTK_LABEL(input_data->result_label), message);
+
+    if (input_data->display_btn) {
+        gtk_grid_remove(GTK_GRID(grid), input_data->display_btn);
+    }
+
+    input_data->display_btn = gtk_button_new_with_label("Display Matrix");
+    gtk_grid_attach(GTK_GRID(grid), input_data->display_btn, 0, rows, cols, 1);
+    g_signal_connect(input_data->display_btn, "clicked", G_CALLBACK(on_display_matrix_clicked), input_data);
+    gtk_widget_set_visible(input_data->display_btn, TRUE);
 }
 
 static void activate(GtkApplication *app, gpointer user_data) {
     GtkWidget *window = gtk_application_window_new(app);
     gtk_window_set_title(GTK_WINDOW(window), "Matrix Determinant");
-    gtk_window_set_default_size(GTK_WINDOW(window), 400, 300);
+    gtk_window_set_default_size(GTK_WINDOW(window), 400, 500);
 
-    // Create a vertical box
     GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
     gtk_window_set_child(GTK_WINDOW(window), box);
 
-    // Create a button to enter matrix
-    GtkWidget *button = gtk_button_new_with_label("Enter Matrix");
-    g_signal_connect(button, "clicked", G_CALLBACK(on_button_clicked), NULL);
-    gtk_box_append(GTK_BOX(box), button);
+    MatrixInputData *input_data = malloc(sizeof(MatrixInputData));
+    memset(input_data, 0, sizeof(MatrixInputData));
 
-    // Create a label to display results
+    GtkWidget *rows_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    GtkWidget *rows_label = gtk_label_new("Rows:");
+    input_data->rows_entry = gtk_entry_new();
+    gtk_entry_set_placeholder_text(GTK_ENTRY(input_data->rows_entry), "Enter rows");
+    gtk_box_append(GTK_BOX(rows_box), rows_label);
+    gtk_box_append(GTK_BOX(rows_box), input_data->rows_entry);
+    gtk_box_append(GTK_BOX(box), rows_box);
+
+    GtkWidget *cols_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    GtkWidget *cols_label = gtk_label_new("Columns:");
+    input_data->cols_entry = gtk_entry_new();
+    gtk_entry_set_placeholder_text(GTK_ENTRY(input_data->cols_entry), "Enter columns");
+    gtk_box_append(GTK_BOX(cols_box), cols_label);
+    gtk_box_append(GTK_BOX(cols_box), input_data->cols_entry);
+    gtk_box_append(GTK_BOX(box), cols_box);
+
+    GtkWidget *generate_btn = gtk_button_new_with_label("Generate Matrix Input");
+    g_signal_connect(generate_btn, "clicked", G_CALLBACK(on_calculate_clicked), input_data);
+    gtk_box_append(GTK_BOX(box), generate_btn);
+
     GtkWidget *result_label = gtk_label_new("Results will be shown here");
     gtk_box_append(GTK_BOX(box), result_label);
+    input_data->result_label = result_label;
+    input_data->input_window = GTK_WINDOW(window);
 
-    // Store the result label as object data
-    g_object_set_data(G_OBJECT(window), "result_label", result_label);
+    // Create a container for the matrix input grid and display button
+    GtkWidget *matrix_container = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+    gtk_box_append(GTK_BOX(box), matrix_container);
+    input_data->matrix_container = matrix_container;
 
     gtk_window_present(GTK_WINDOW(window));
 }
