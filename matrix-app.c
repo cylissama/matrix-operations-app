@@ -237,9 +237,10 @@ static void update_saved_matrices_combo(GtkDropDown *combo) {
     GtkStringList *list = GTK_STRING_LIST(gtk_drop_down_get_model(combo));
     guint count = g_list_model_get_n_items(G_LIST_MODEL(list));
     
-    // Clear existing items
+    // Clear existing items - fixed to match API requirements
     if (count > 0) {
-        gtk_string_list_splice(list, 0, count, 0, NULL);
+        // Use NULL for no additions instead of providing (0, NULL)
+        gtk_string_list_splice(list, 0, count, NULL);
     }
     
     // Add new items
@@ -293,6 +294,7 @@ static void on_load_matrix_clicked(GtkWidget *widget, gpointer data) {
         return;
     }
 
+    // Fixed: Removed duplicate code block, keeping only one version
     GtkStringObject *item = GTK_STRING_OBJECT(g_list_model_get_item(
         gtk_drop_down_get_model(combo), pos));
     const char *name = gtk_string_object_get_string(item);
@@ -300,15 +302,8 @@ static void on_load_matrix_clicked(GtkWidget *widget, gpointer data) {
     Matrix *loaded_matrix = load_matrix(name);
     if (!loaded_matrix) {
         gtk_label_set_text(GTK_LABEL(input_data->result_label), "Failed to load matrix");
-        return;
-    }
-    GtkStringObject *item = GTK_STRING_OBJECT(g_list_model_get_item(gtk_drop_down_get_model(combo), pos));
-    const char *name = gtk_string_object_get_string(item);
-    
-    Matrix *loaded_matrix = load_matrix(name);
-    if (!loaded_matrix) {
-        gtk_label_set_text(GTK_LABEL(input_data->result_label), "Failed to load matrix");
-        g_free(name);
+        // Don't free name as it's owned by the string object
+        g_object_unref(item);
         return;
     }
     
@@ -341,6 +336,9 @@ static void on_load_matrix_clicked(GtkWidget *widget, gpointer data) {
     
     // Update the name entry
     gtk_editable_set_text(GTK_EDITABLE(input_data->matrix_name_entry), name);
+    
+    // Cleanup the string object reference
+    g_object_unref(item);
     
     gtk_label_set_text(GTK_LABEL(input_data->result_label), "Matrix loaded successfully");
 }
@@ -606,9 +604,9 @@ static void activate(GtkApplication *app, gpointer user_data) {
     GtkWidget *combo_label = gtk_label_new("Load Matrix:");
     gtk_box_append(GTK_BOX(load_box), combo_label);
     
-    input_data->load_combo = gtk_drop_down_new(NULL, NULL);
+    // Fix for the dropdown - create and cast properly
     GtkStringList *list = gtk_string_list_new(NULL);
-    gtk_drop_down_set_model(input_data->load_combo, G_LIST_MODEL(list));
+    input_data->load_combo = gtk_drop_down_new(G_LIST_MODEL(list), NULL);
     gtk_box_append(GTK_BOX(load_box), input_data->load_combo);
     
     GtkWidget *load_btn = gtk_button_new_with_label("Load");
