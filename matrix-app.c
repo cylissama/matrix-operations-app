@@ -1,3 +1,12 @@
+/*
+Cy Dixon
+Matrix Calculation App
+2025
+
+Uses GTK for UI elements
+Compile using: gcc $(pkg-config --cflags gtk4) -o mat matrix-app.c $(pkg-config --libs gtk4)
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
